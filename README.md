@@ -8,7 +8,7 @@
 
 - **姿态仪（Attitude Indicator）**：基于加速度计计算俯仰（pitch）与横滚（roll），以人工地平仪方式绘制天空/地面与俯仰梯。
 - **磁罗盘（Magnetic Compass）**：基于磁力计计算航向（heading），支持 N/E/S/W  cardinal 标记与刻度盘。
-- **离线底图（Offline Basemap）**：使用 [`flutter_map`](https://pub.dev/packages/flutter_map) 作为渲染层，底图瓦片**飞行前由用户主动选择区域下载到设备本地**，飞行中开启飞行模式（离线）仍可显示。实时显示当前经纬度的导航箭头，并支持位置跟随（点击地图可取消跟随）。
+- **离线地图**：使用 [`flutter_map`](https://pub.dev/packages/flutter_map) 渲染。海岸线/陆地通过 Natural Earth 50m GeoJSON 以 PolygonLayer 绘制；地形阴影通过预渲染的 MBTiles 瓦片叠加 TileLayer；机场/跑道通过 OurAirports CSV 数据以 MarkerLayer/PolylineLayer 展示。全部离线运行，飞行中不依赖网络。
 - **实时飞行数据**：显示高度（ALT）、地速（SPD，m/s 转 km/h）、垂直速度（V/S，根据地速与俯仰角估算）、卫星数量（SAT）。
 - **传感器融合**：通过低通滤波（low-pass）平滑加速度计/磁力计读数，降低噪声。
 - **沉浸式横屏 UI**：强制横屏（landscape）、沉浸式（immersiveSticky）状态栏、深色主题。
@@ -18,8 +18,9 @@
 | 类别 | 依赖 | 用途 |
 | --- | --- | --- |
 | 框架 | Flutter SDK `^3.10.4` | 跨平台 UI |
-| 地图 | `flutter_map` `^8.3.1` | 瓦片地图渲染 |
+| 地图 | `flutter_map` `^8.3.1` | 地图渲染引擎 |
 | 地理 | `latlong2` `^0.10.1` | 经纬度坐标模型 |
+| CSV 解析 | `csv` | 机场/跑道数据加载 |
 | 传感器 | `sensors_plus` `^7.1.0` | 加速度计 / 磁力计 / 陀螺仪事件流 |
 | 定位 | `geolocator` `^14.0.3` | GPS 位置、速度、高度、权限请求 |
 | 权限 | `permission_handler` `^12.0.3` | 运行时权限管理 |
@@ -38,14 +39,14 @@ lib/
 │   └── flight_data.dart           # 飞行数据模型（不可变 FlightData）
 ├── services/
 │   ├── sensor_service.dart        # 已实现：传感器与 GPS 融合，广播 FlightData 流
-│   └── map_download_service.dart  # 规划：区域瓦片下载与落盘（飞行前使用）
+│   ├── airport_data_service.dart  # 规划：OurAirports CSV 加载与查询
+│   └── elevation_service.dart     # 规划：SRTM DEM 海拔查询
 ├── pages/
-│   ├── flight_page.dart           # 已实现：主 HUD 布局（上：仪表 / 下：地图+数据）
-│   └── map_manager_page.dart      # 规划：区域选择 / 下载 / 管理 UI
+│   └── flight_page.dart           # 已实现：主 HUD 布局（上：仪表 / 下：地图+数据）
 └── widgets/
     ├── attitude_indicator.dart    # 已实现：姿态仪（CustomPaint 绘制）
     ├── magnetic_compass.dart      # 已实现：磁罗盘（CustomPaint 绘制）
-    └── offline_map.dart           # 已实现：底图与位置标记（规划改用本地 TileProvider）
+    └── offline_map.dart           # 已实现：底图与飞行图层（GeoJSON + TileLayer + Marker）
 test/
 └── widget_test.dart               # 默认 widget 测试
 ```
@@ -81,7 +82,7 @@ flutter build ios          # iOS（需 macOS + Xcode）
 
 - **权限**：应用通过 `geolocator` 在运行时请求定位权限。首次启动若拒绝定位，地图位置与高度/速度等字段将显示 `---`。
 - **横屏**：应用强制横屏，请在横置设备上使用。
-- **地图交互**：点击地图任意位置会取消"位置跟随"，右下角定位按钮可重新居中。
+- **地图交互**：点击地图任意位置会取消"位置跟随"，右下角定位按钮可重新居中。拖动地图时海岸线自动切换为简化版本，松手后恢复精细版本。
 - **数据说明**：
   - 俯仰/横滚来自加速度计，航向来自磁力计，均经过低通滤波。
   - 垂直速度（V/S）由地速与俯仰角估算，为近似值。
@@ -98,39 +99,52 @@ flutter build ios          # iOS（需 macOS + Xcode）
 
 该设计将数据采集（Service）与展示（Widget）解耦，便于后续替换为模拟数据源或添加新的数据通道。
 
-## 离线底图（Offline Basemap）
+## 离线地图
 
-本项目定位为**飞行中离线可用**的应用，地图因此采用"飞行前下载、文档目录持久化、飞行模式只读"的设计，而非在线瓦片。
+本项目定位为**飞行中纯离线**应用，地图全部数据预先打包到用户设备，飞行中不依赖任何网络请求。
 
-### 设计原则
-
-- **用户主动下载，而非缓存**：底图瓦片在飞行前、有网络时由用户在地图管理页选择区域下载。它被视为**用户数据文件**，不是系统缓存。
-- **持久化存储，不被系统清理**：瓦片落盘到应用**文档目录**（`path_provider` 的 `getApplicationDocumentsDirectory()`），而非临时/缓存目录（`getTemporaryDirectory` / `getCacheDirectory`）。文档目录在存储空间紧张时不会被操作系统自动回收，也不会被"清除缓存"动作删除。
-- **飞行中纯离线**：进入飞行（飞行模式）后，地图只读本地瓦片文件，不发起任何网络请求。
-
-### 瓦片文件布局
+### 数据来源与体系
 
 ```
-{documents}/pocket_aero_maps/
-├── {regionId}/            # 区域标识，如 bounds 哈希或自定义名称
-│   ├── region.json        # 元数据：bounds、缩放范围、瓦片数、来源
-│   └── {z}/{x}/{y}.png    # 标准 slippy 瓦片
-└── {regionId2}/...
+MAP_resources/
+├── Natural Earth/               # 海岸线、湖泊、陆地（矢量）
+├── HYP_50M_SR.tif               # 地形阴影（栅格，167 MB）
+├── SRTM30_1km/                  # 全球 DEM 1km 分辨率（海拔查询）
+└── OurAirports/                 # 机场、跑道、频率、导航台（CSV）
 ```
 
-### 核心组件
+### 数据预处理管线
 
-| 组件 | 职责 |
-| --- | --- |
-| `MapDownloadService` | 飞行前按区域包围盒 + 缩放级别逐个下载瓦片并落盘；通过 `Stream` 上报进度，支持取消 |
-| `OfflineMap` | 改用读取本地文件的 `TileProvider`；对**未下载到（超范围/超缩放）的瓦片做优雅降级**，不崩溃、不黑屏 |
-| `MapManagerPage` | 选择区域（框选或输入经纬度范围）、选择缩放级别、管理已下载区域（保留/删除由用户决定） |
+在 PC 端通过 GDAL 等工具一次性完成：
 
-### 瓦片来源
+```
+Natural Earth .shp
+  → ogr2ogr -simplify 0.001 → GeoJSON
+  → assets/data/*.geojson  （PolygonLayer 海陆底图）
 
-默认使用 [OpenStreetMap](https://www.openstreetmap.org/) 标准 XYZ 瓦片（`{z}/{x}/{y}.png`），下载时通过 `HttpClient` 携带 `User-Agent` 以遵守 OSM 使用规范。后续可替换为航空图数据源（如 OpenAIP、Sectional）而不影响离线架构。
+HYP_50M_SR.tif
+  → gdal2tiles.py → XYZ PNG tiles
+  → MBTiles（Terrain tile provider）
 
-> 状态说明：当前 `lib/widgets/offline_map.dart` 仍使用 OSM **在线** `urlTemplate` 作为占位实现；离线下载服务、本地 `TileProvider` 与地图管理页为规划中的实现，将在后续提交中落地。
+SRTM30 .dem
+  → gdal_merge.py → 单张 GeoTIFF
+  → 降采样 → 内存网格（运行时 O(1) 海拔查询）
+
+OurAirports .csv
+  → 运行时 CSV 解析 → 内存/ SQLite
+  → MarkerLayer（机场）+ PolylineLayer（跑道）
+```
+
+### 图层渲染结构
+
+| 图层 | 类型 | 精度选择 | 说明 |
+| --- | --- | --- | --- |
+| 海陆底图 | `PolygonLayer` + `PolylineLayer` | 低缩放用 110m，主力 50m | 拖拽时自动降级为 110m，松手恢复 50m |
+| 地形阴影 | `TileLayer`（MBTiles Provider） | zoom 0-12 | 已预渲染的灰度 hillshade |
+| 机场标记 | `MarkerLayer` | 全部机场 | ICAO/名称/频率可点选 |
+| 跑道 | `PolylineLayer` | 有坐标的跑道 | 方向线 |
+| 海拔查询 | 内存 DEM 网格 | 1km | 实时显示离地高度 AGL |
+| 导航台 | `MarkerLayer` | VOR/NDB | 下拉可查询
 
 ## 平台支持
 
@@ -143,9 +157,10 @@ flutter build ios          # iOS（需 macOS + Xcode）
 
 ## 已知限制
 
-- **离线底图尚未落地**：当前 `OfflineMap` 仍使用 OSM 在线 `urlTemplate` 占位，区域下载服务、本地 `TileProvider` 与地图管理页待实现；落地前无网络时地图无法显示。
+- **离线地图待实现**：当前 `OfflineMap` 仍使用 OSM 在线 `urlTemplate` 占位，GeoJSON 海陆底图、MBTiles 地形阴影、CSV 机场数据等组件均为待实现状态。
 - 垂直速度、卫星数量为简化估算，非专业航电精度。
 - 未接入陀螺仪融合算法（已预留 `_gyroscopeSub` 字段，尚未使用）。
+- 预处理管线（ogr2ogr、gdal2tiles）需在 PC 端手动执行，尚未集成到构建流程。
 
 ## 许可证
 
