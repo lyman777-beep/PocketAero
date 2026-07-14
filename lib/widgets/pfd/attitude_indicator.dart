@@ -21,10 +21,18 @@ class AttitudeIndicator extends StatelessWidget {
       child: Stack(
         children: [
           CustomPaint(
-            painter: _AttitudePainter(pitch: pitch, roll: roll),
+            painter: _AttitudePainter(
+              pitch: pitch,
+              roll: roll,
+            ),
             size: Size(size, size * 0.7),
           ),
-          _buildPitchLabels(),
+          ClipRect(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 60),
+              child: _buildPitchLabels(),
+            ),
+          ),
           _buildBankLabels(),
         ],
       ),
@@ -82,9 +90,9 @@ class AttitudeIndicator extends StatelessWidget {
 
   Widget _buildBankLabels() {
     final centerX = size / 2;
-    final radius = size * 0.48 * 0.95;
-    // Match the arc center position from the painter
-    final arcCenterY = size * 0.7 * 0.05 + radius;
+    final radius = size * 0.48;
+    final scaleRadius = radius * 0.65;
+    final arcCenterY = 15 + scaleRadius;
     final labels = <Widget>[];
 
     final bankAngles = [10, 20, 30];
@@ -92,7 +100,7 @@ class AttitudeIndicator extends StatelessWidget {
     for (final angle in bankAngles) {
       for (final sign in [-1, 1]) {
         final rad = (-90 + sign * angle) * pi / 180;
-        final labelRadius = radius * 0.72;
+        final labelRadius = scaleRadius * 0.72;
         final lx = centerX + cos(rad) * labelRadius;
         final ly = arcCenterY + sin(rad) * labelRadius;
 
@@ -121,7 +129,10 @@ class _AttitudePainter extends CustomPainter {
   final double pitch;
   final double roll;
 
-  _AttitudePainter({required this.pitch, required this.roll});
+  _AttitudePainter({
+    required this.pitch,
+    required this.roll,
+  });
 
   static const Color _skyColor = Color(0xFF1A6DD9);
   static const Color _groundColor = Color(0xFF8B5E3C);
@@ -159,8 +170,8 @@ class _AttitudePainter extends CustomPainter {
 
     canvas.restore();
 
-    _drawBankScale(canvas, size, centerX, radius);
     _drawAircraftSymbol(canvas, size, centerX, centerY);
+    _drawBankScale(canvas, size, centerX, radius);
   }
 
   void _drawSkyGround(Canvas canvas, double radius, double pitchOffset) {
@@ -216,43 +227,6 @@ class _AttitudePainter extends CustomPainter {
     }
   }
 
-  void _drawBankScale(Canvas canvas, Size size, double centerX, double radius) {
-    final bankAngles = [10, 20, 30, 45, 60];
-    final scaleRadius = radius * 0.95;
-    // Bank scale arc center is below the top of the instrument
-    final arcCenterY = size.height * 0.05 + scaleRadius;
-
-    final tickPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2;
-
-    for (final angle in bankAngles) {
-      for (final sign in [-1, 1]) {
-        // Angle from top (12 o'clock), going clockwise for positive, counter-clockwise for negative
-        final rad = (-90 + sign * angle) * pi / 180;
-        final inner = scaleRadius * 0.85;
-        final outer = scaleRadius;
-
-        final x1 = centerX + cos(rad) * inner;
-        final y1 = arcCenterY + sin(rad) * inner;
-        final x2 = centerX + cos(rad) * outer;
-        final y2 = arcCenterY + sin(rad) * outer;
-
-        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), tickPaint);
-      }
-    }
-
-    // Yellow triangle at top (0° bank reference)
-    final triangleY = arcCenterY - scaleRadius;
-    final trianglePaint = Paint()..color = const Color(0xFFFFFF00);
-    final trianglePath = Path()
-      ..moveTo(centerX - 7, triangleY - 12)
-      ..lineTo(centerX + 7, triangleY - 12)
-      ..lineTo(centerX, triangleY)
-      ..close();
-    canvas.drawPath(trianglePath, trianglePaint);
-  }
-
   void _drawAircraftSymbol(Canvas canvas, Size size, double centerX, double centerY) {
     final wingSpan = size.width * 0.2;
 
@@ -275,7 +249,7 @@ class _AttitudePainter extends CustomPainter {
 
     canvas.drawLine(
       Offset(centerX, centerY),
-      Offset(centerX, centerY + size.height * 0.15),
+      Offset(centerX, centerY - size.height * 0.15),
       symbolPaint,
     );
 
@@ -292,6 +266,40 @@ class _AttitudePainter extends CustomPainter {
       ),
       squarePaint,
     );
+  }
+
+  void _drawBankScale(Canvas canvas, Size size, double centerX, double radius) {
+    final bankAngles = [10, 20, 30, 45, 60];
+    final scaleRadius = radius * 0.65;
+    final arcCenterY = 15 + scaleRadius;
+
+    final tickPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2;
+
+    for (final angle in bankAngles) {
+      for (final sign in [-1, 1]) {
+        final rad = (-90 + sign * angle) * pi / 180;
+        final inner = scaleRadius * 0.85;
+        final outer = scaleRadius;
+
+        final x1 = centerX + cos(rad) * inner;
+        final y1 = arcCenterY + sin(rad) * inner;
+        final x2 = centerX + cos(rad) * outer;
+        final y2 = arcCenterY + sin(rad) * outer;
+
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), tickPaint);
+      }
+    }
+
+    final triangleY = arcCenterY - scaleRadius;
+    final trianglePaint = Paint()..color = const Color(0xFFFFFF00);
+    final trianglePath = Path()
+      ..moveTo(centerX - 7, triangleY - 12)
+      ..lineTo(centerX + 7, triangleY - 12)
+      ..lineTo(centerX, triangleY)
+      ..close();
+    canvas.drawPath(trianglePath, trianglePaint);
   }
 
   @override

@@ -25,7 +25,8 @@ void main() {
         theme: ThemeData.dark(),
         home: Scaffold(
           backgroundColor: const Color(0xFF0D0D1A),
-          body: Center(
+          body: Align(
+            alignment: Alignment.topCenter,
             child: RepaintBoundary(
               key: key,
               child: PrimaryFlightDisplay(data: testData),

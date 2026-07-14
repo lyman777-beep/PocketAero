@@ -40,8 +40,8 @@ class HeadingArc extends StatelessWidget {
   Widget _buildHeadingLabels() {
     final centerX = width / 2;
     // Arc center is at the bottom center
-    final centerY = height * 0.88;
-    final radius = width * 0.36;
+    final centerY = height * 0.95;
+    final radius = (width * 0.36).clamp(0.0, height * 0.5);
     final labels = <Widget>[];
 
     final startHeading = heading - 45;
@@ -120,7 +120,7 @@ class HeadingArc extends StatelessWidget {
 
   Widget _buildLabel() {
     return Positioned(
-      top: height * 0.45,
+      top: height * 0.35,
       left: 0,
       right: 0,
       child: const Text(
@@ -149,8 +149,8 @@ class _HeadingArcPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final centerX = size.width / 2;
     // Arc center at the bottom
-    final centerY = size.height * 0.88;
-    final radius = size.width * 0.36;
+    final centerY = size.height * 0.95;
+    final radius = (size.width * 0.36).clamp(0.0, size.height * 0.5);
 
     _drawArc(canvas, centerX, centerY, radius);
     _drawTicks(canvas, centerX, centerY, radius);
