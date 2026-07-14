@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../models/flight_data.dart';
 import '../services/sensor_service.dart';
-import '../widgets/attitude_indicator.dart';
-import '../widgets/magnetic_compass.dart';
+import '../widgets/pfd/primary_flight_display.dart';
 import '../widgets/offline_map.dart';
 
 class FlightPage extends StatefulWidget {
@@ -15,7 +14,12 @@ class FlightPage extends StatefulWidget {
 
 class _FlightPageState extends State<FlightPage> {
   final _sensorService = SensorService();
-  FlightData _data = const FlightData();
+  FlightData _data = const FlightData(
+    targetAltitude: 10000,
+    targetSpeed: 250,
+    targetHeading: 136,
+    baroPressure: 1013,
+  );
   StreamSubscription<FlightData>? _sub;
 
   @override
@@ -38,26 +42,6 @@ class _FlightPageState extends State<FlightPage> {
     super.dispose();
   }
 
-  Widget _buildDataRow(String label, String value, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Row(
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              color: color ?? Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -65,105 +49,38 @@ class _FlightPageState extends State<FlightPage> {
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(
-              flex: 3,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  const Spacer(),
-                  AttitudeIndicator(
-                    pitch: _data.pitch,
-                    roll: _data.roll,
-                    size: 200,
-                  ),
+                  _buildStatusItem('AP', const Color(0xFF00FF00)),
+                  _buildStatusItem('LNAV', Colors.white54),
+                  _buildStatusItem('VNAV', Colors.white54),
+                  _buildStatusItem('SPD', Colors.white54),
                   const SizedBox(width: 16),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      MagneticCompass(
-                        heading: _data.heading,
-                        size: 140,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildDataRow(
-                        'HDG',
-                        '${_data.heading.round()}°',
-                      ),
-                      _buildDataRow(
-                        'PITCH',
-                        '${_data.pitch.toStringAsFixed(1)}°',
-                      ),
-                      _buildDataRow(
-                        'ROLL',
-                        '${_data.roll.toStringAsFixed(1)}°',
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
+                  _buildDataItem('HDG', '${_data.heading.round()}', const Color(0xFF00FF00)),
+                  _buildDataItem('ALT', '${(_data.altitude ?? 0).round()}', const Color(0xFF00FF00)),
+                  _buildDataItem('VS', '${(_data.verticalSpeed ?? 0).round()}', const Color(0xFF00FF00)),
+                  _buildDataItem('FPA', '0.0', const Color(0xFF00FF00)),
                 ],
               ),
             ),
-            Container(
-              height: 1,
-              color: Colors.white12,
-            ),
+            const Divider(color: Colors.white12, height: 1),
             Expanded(
-              flex: 2,
               child: Row(
                 children: [
                   Expanded(
-                    flex: 3,
+                    flex: 5,
+                    child: PrimaryFlightDisplay(data: _data),
+                  ),
+                  Container(width: 1, color: Colors.white12),
+                  Expanded(
+                    flex: 4,
                     child: OfflineMap(
                       latitude: _data.latitude,
                       longitude: _data.longitude,
                       heading: _data.heading,
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    color: Colors.white12,
-                  ),
-                  Container(
-                    width: 110,
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildDataRow(
-                          'ALT',
-                          _data.altitude != null
-                              ? '${_data.altitude!.round()}m'
-                              : '---',
-                          color: const Color(0xFF00FF88),
-                        ),
-                        _buildDataRow(
-                          'SPD',
-                          _data.speed != null
-                              ? '${(_data.speed! * 3.6).round()}km/h'
-                              : '---',
-                          color: const Color(0xFF00D4FF),
-                        ),
-                        _buildDataRow(
-                          'V/S',
-                          _data.verticalSpeed != null
-                              ? '${_data.verticalSpeed!.round()}m/s'
-                              : '---',
-                        ),
-                        _buildDataRow(
-                          'SAT',
-                          '${_data.satelliteCount ?? 0}',
-                        ),
-                        const Spacer(),
-                        Center(
-                          child: Text(
-                            'POCKET AERO',
-                            style: TextStyle(
-                              color: Colors.white24,
-                              fontSize: 9,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
@@ -172,6 +89,37 @@ class _FlightPageState extends State<FlightPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStatusItem(String label, Color color) {
+    return Text(
+      label,
+      style: TextStyle(
+        color: color,
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _buildDataItem(String label, String value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: Colors.grey[400], fontSize: 10),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }

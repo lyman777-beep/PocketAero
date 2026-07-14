@@ -9,6 +9,13 @@ class FlightData {
   final double? verticalSpeed;
   final int? satelliteCount;
 
+  final double? targetAltitude;
+  final double? targetSpeed;
+  final double? targetHeading;
+  final double? baroPressure;
+  final double? mach;
+  final double? ias;
+
   const FlightData({
     this.pitch = 0,
     this.roll = 0,
@@ -19,5 +26,11 @@ class FlightData {
     this.speed,
     this.verticalSpeed,
     this.satelliteCount,
+    this.targetAltitude,
+    this.targetSpeed,
+    this.targetHeading,
+    this.baroPressure,
+    this.mach,
+    this.ias,
   });
 }
