@@ -17,38 +17,45 @@ class HeadingArc extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        children: [
-          CustomPaint(
-            painter: _HeadingArcPainter(
-              heading: heading,
-              targetHeading: targetHeading,
-            ),
-            size: Size(width, height),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth > 0 ? constraints.maxWidth : width;
+        final h = constraints.maxHeight > 0 ? constraints.maxHeight : height;
+
+        return SizedBox(
+          width: w,
+          height: h,
+          child: Stack(
+            children: [
+              CustomPaint(
+                painter: _HeadingArcPainter(
+                  heading: heading,
+                  targetHeading: targetHeading,
+                ),
+                size: Size(w, h),
+              ),
+              _buildHeadingLabels(w, h),
+              _buildCurrentHeadingBox(w, h),
+              _buildLabel(w, h),
+            ],
           ),
-          _buildHeadingLabels(),
-          _buildCurrentHeadingBox(),
-          _buildLabel(),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildHeadingLabels() {
-    final centerX = width / 2;
+  Widget _buildHeadingLabels(double w, double h) {
+    final centerX = w / 2;
     // Arc center is at the bottom center
-    final centerY = height * 0.95;
-    final radius = (width * 0.36).clamp(0.0, height * 0.5);
+    final centerY = h * 0.95;
+    final radius = (w * 0.36).clamp(0.0, h * 0.5);
     final labels = <Widget>[];
 
-    final startHeading = heading - 45;
-    final endHeading = heading + 45;
+    final startHeading = heading - 55;
+    final endHeading = heading + 55;
 
-    for (double h = startHeading; h <= endHeading; h += 30) {
-      var normalizedH = h;
+    for (double hdg = startHeading; hdg <= endHeading; hdg += 30) {
+      var normalizedH = hdg;
       while (normalizedH < 0) {
         normalizedH += 360;
       }
@@ -57,15 +64,14 @@ class HeadingArc extends StatelessWidget {
       }
 
       // Calculate angle: 0° heading is at top (-90° in standard math)
-      // Each degree of heading = 1 degree of arc rotation
       final angleFromTop = (normalizedH - heading) * pi / 180;
       final labelRadius = radius * 0.72;
       final lx = centerX + sin(angleFromTop) * labelRadius;
       final ly = centerY - cos(angleFromTop) * labelRadius;
 
       // Only show labels that are within visible area
-      if (ly < 20 || ly > height - 10) continue;
-      if (lx < 5 || lx > width - 5) continue;
+      if (ly < 20 || ly > h - 10) continue;
+      if (lx < 5 || lx > w - 5) continue;
 
       final label = normalizedH.round().toString().padLeft(3, '0');
       labels.add(
@@ -87,12 +93,12 @@ class HeadingArc extends StatelessWidget {
     return Stack(children: labels);
   }
 
-  Widget _buildCurrentHeadingBox() {
+  Widget _buildCurrentHeadingBox(double w, double h) {
     final boxWidth = 56.0;
     final boxHeight = 24.0;
-    final x = width / 2 - boxWidth / 2;
-    // Position at the top of the arc
-    final y = height * 0.08;
+    final x = w / 2 - boxWidth / 2;
+    // Position below the HDG label
+    final y = 20.0;
 
     return Positioned(
       left: x,
@@ -118,17 +124,15 @@ class HeadingArc extends StatelessWidget {
     );
   }
 
-  Widget _buildLabel() {
+  Widget _buildLabel(double w, double h) {
     return Positioned(
-      top: height * 0.35,
-      left: 0,
-      right: 0,
+      top: 2,
+      left: w / 2 - 16,
       child: const Text(
         'HDG',
-        textAlign: TextAlign.center,
         style: TextStyle(
           color: Color(0xFF00FFFF),
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -142,7 +146,7 @@ class _HeadingArcPainter extends CustomPainter {
 
   _HeadingArcPainter({required this.heading, this.targetHeading});
 
-  static const double _arcSpan = 90;
+  static const double _arcSpan = 110;
   static const double _tickInterval = 5;
 
   @override
@@ -229,15 +233,18 @@ class _HeadingArcPainter extends CustomPainter {
   }
 
   void _drawHeadingPointer(Canvas canvas, double centerX, double centerY, double radius) {
-    // Draw a magenta triangle at the top of the arc (current heading = 0° offset)
+    // Draw a magenta diamond at the top of the arc (current heading = 0° offset)
     final pointerY = centerY - radius;
     final pointerPaint = Paint()..color = const Color(0xFFFF00FF);
-    final pointerPath = Path()
-      ..moveTo(centerX - 7, pointerY + 10)
-      ..lineTo(centerX + 7, pointerY + 10)
-      ..lineTo(centerX, pointerY - 2)
+
+    // Diamond shape
+    final diamondPath = Path()
+      ..moveTo(centerX, pointerY - 6)    // top
+      ..lineTo(centerX + 6, pointerY)     // right
+      ..lineTo(centerX, pointerY + 6)     // bottom
+      ..lineTo(centerX - 6, pointerY)     // left
       ..close();
-    canvas.drawPath(pointerPath, pointerPaint);
+    canvas.drawPath(diamondPath, pointerPaint..style = PaintingStyle.fill);
   }
 
   @override
